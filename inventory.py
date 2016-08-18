@@ -16,6 +16,8 @@ from subprocess import check_call
 from argparse import ArgumentParser
 from tempfile import mkdtemp
 from shutil import rmtree
+from ansible.constants import p, get_config
+from ansible import utils
 
 
 class AnsibleGitInventory(object):
@@ -87,65 +89,42 @@ class AnsibleGitInventory(object):
             # Parse YAML.
             data = yaml.load(f)
 
-            # Prepare result dict.
             result = {
-                '_meta': {
-                    'hostvars': {}
-                },
-                name: {
-                    'children': []
-                }
-            }
-
-            # Loop through inventory YAML and build result yaml.
-            for tier, group in data.iteritems():
-
-                # Build group name for inv-tier.
-                inv_tier = '{0}-{1}'.format(name, tier)
-
-                # Create empty tier & inv-tier groups.
-                result[tier] = {
-                    'children': []
-                }
-                result[inv_tier] = {
-                    'children': [tier]
                 }
 
-                # Add tier to inv group.
-                result[name]['children'].append(tier)
+            for group, groupdata in data.iteritems():
+                hosts = groupdata['hosts']
+                groupobj = {}
+                hostobj = []
+                for host in hosts:
+                    if type(host) is dict:
+                        #we have host-level vars to deal with
+                        hostname = host.keys()[0]
+                        hostvars = host[hostname]
+                        hostobj.append(hostname)
+                        #test if result obj has the _meta thingy
+                        if not '_meta' in result.keys():
+                            result['_meta'] = {}
+                            result['_meta']['hostvars'] = {}
 
-                for loc, hosts in group.iteritems():
+                        result['_meta']['hostvars'][hostname] = hostvars
 
-                    # Build group names for tier-loc, inv-loc and inv-tier-loc.
-                    tier_loc     = '{0}-{1}'.format(tier, loc)
-                    inv_loc      = '{0}-{1}'.format(name, loc)
-                    inv_tier_loc = '{0}-{1}'.format(name, tier_loc)
 
-                    # Add tier-loc to tier group.
-                    result[tier]['children'].append(tier_loc)
+                    else:
+                        #just add the host
+                        hostobj.append(host)
+                groupobj['hosts'] = hostobj
+                if ('vars' in groupdata) and (groupdata['vars'] is not None):
+                    vars = {}
+                    variables = groupdata['vars']
+                    for var in variables:
+                        key = var.keys()[0]
+                        value = var[key]
+                        vars[key] = value
 
-                    # Add tier-loc to inv-loc group.
-                    if inv_loc not in result:
-                        result[inv_loc] = {
-                            'children': []
-                        }
-                    result[inv_loc]['children'].append(tier_loc)
+                    groupobj['vars'] = vars
 
-                    # Add inv-loc to loc group.
-                    if loc not in result:
-                        result[loc] = {
-                            'children': [inv_loc]
-                        }
-                    elif inv_loc not in result[loc]['children']:
-                        result[loc]['children'].append(inv_loc)
-
-                    # Create tier-loc and inv-tier-loc groups.
-                    result[tier_loc] = {
-                        'hosts': hosts
-                    }
-                    result[inv_tier_loc] = {
-                        'children': [tier_loc]
-                    }
+                result[group] = groupobj
 
             return json.dumps(obj=result, sort_keys=True, indent=4, separators=(',', ': '))
 
@@ -158,6 +137,13 @@ if __name__ == '__main__':
     # We need to do that because the Tower can't pass any CLI arguments to a
     # dynamic inventory script. Therefor environment variables must be used.
     #
+
+    if 'DEBUG_TEST_PATH' in os.environ:
+        debug_test_path = os.environ['DEBUG_TEST_PATH']
+        with AnsibleGitInventory() as obj:
+            data = obj.parse_inventory(path=debug_test_path)
+            print(data)
+
 
     if 'URL' in os.environ and 'INVENTORY' in os.environ and os.environ['URL'] and os.environ['INVENTORY']:
 
@@ -172,24 +158,38 @@ if __name__ == '__main__':
 
         if 'COMMIT' in os.environ:
             kwargs_clone['commit'] = os.environ['COMMIT']
-
+    
     else:
-
-        # Parse CLI arguments.
-        parser = ArgumentParser(description='Ansible inventory script')
-        parser.add_argument('--sshkey', help='Path to an alternative SSH private key', type=str)
-        parser.add_argument('--commit', help='Commit to checkout (e.g. branch or tag)', type=str)
-        parser.add_argument('url', help='URL of the git repository', type=str)
-        parser.add_argument('inventory', help='Path of the inventory file', type=str)
-        args = parser.parse_args()
+        #Read things from ansible config
+        config_section = "git-inventory"
+        url = get_config(p, config_section, "url", "URL","")
+        sshkey = get_config(p, config_section, "sshkey", "SSHKEY","")
+        commit = get_config(p, config_section, "commit", "COMMIT","")
+        inventory = get_config(p, config_section, "inventory", "INVENTORY","")
 
         kwargs_clone = {
-            'url': args.url,
-            'sshkey': args.sshkey,
-            'commit': args.commit,
+            'url': url,
+            'sshkey': sshkey,
+            'commit': commit,
         }
 
-        inventory = args.inventory
+#    else:
+#
+#        # Parse CLI arguments.
+#        parser = ArgumentParser(description='Ansible inventory script')
+#        parser.add_argument('--sshkey', help='Path to an alternative SSH private key', type=str)
+#        parser.add_argument('--commit', help='Commit to checkout (e.g. branch or tag)', type=str)
+#        parser.add_argument('url', help='URL of the git repository', type=str)
+#        parser.add_argument('inventory', help='Path of the inventory file', type=str)
+#        args = parser.parse_args()
+#
+#        kwargs_clone = {
+#            'url': args.url,
+#            'sshkey': args.sshkey,
+#            'commit': args.commit,
+#        }
+#
+#        inventory = args.inventory
 
     #
     # Clone repository and parse inventory file.
