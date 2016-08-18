@@ -1,0 +1,25 @@
+---
+web-site1:
+        hosts:
+            - web1
+            - web2:
+                name: test
+                ansible_connection: winrm
+        vars:
+            - testvar: myvalue
+web-site2:
+        hosts:
+            - web3
+            - web4
+        vars:
+db-site1:
+        hosts:
+            - db1
+            - db2
+        vars:
+db-site2:
+        hosts:
+            - db3
+            - db4
+        vars:
+            - ansible_connection: winrm
