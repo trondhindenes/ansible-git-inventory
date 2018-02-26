@@ -19,7 +19,6 @@ from shutil import rmtree
 from ansible.constants import p, get_config
 from ansible import utils
 
-
 class AnsibleGitInventory(object):
     '''
     Class to read a YAML from a git repository and generate a valid Ansible
@@ -89,31 +88,32 @@ class AnsibleGitInventory(object):
             # Parse YAML.
             data = yaml.load(f)
 
-            result = {
-                }
-
+            result = {}
             for group, groupdata in data.iteritems():
-                hosts = groupdata['hosts']
-                groupobj = {}
-                hostobj = []
-                for host in hosts:
-                    if type(host) is dict:
-                        #we have host-level vars to deal with
-                        hostname = host.keys()[0]
-                        hostvars = host[hostname]
-                        hostobj.append(hostname)
-                        #test if result obj has the _meta thingy
-                        if not '_meta' in result.keys():
-                            result['_meta'] = {}
-                            result['_meta']['hostvars'] = {}
+		groupobj = {}
+                # Check for host definition. Could be absend due to
+                # child definition
+                if ('hosts' in groupdata) and (groupdata['hosts'] is not None):
+                    hosts = groupdata['hosts']
+                    hostobj = []
 
-                        result['_meta']['hostvars'][hostname] = hostvars
+                    for host in hosts:
+                        if type(host) is dict:
+                            #we have host-level vars to deal with
+                            hostname = host.keys()[0]
+                            hostvars = host[hostname]
+                            hostobj.append(hostname)
+                            #test if result obj has the _meta thingy
+                            if not '_meta' in result.keys():
+                                result['_meta'] = {}
+                                result['_meta']['hostvars'] = {}
 
+                            result['_meta']['hostvars'][hostname] = hostvars
+                        else:
+                            #just add the host
+                            hostobj.append(host)
+                    groupobj['hosts'] = hostobj
 
-                    else:
-                        #just add the host
-                        hostobj.append(host)
-                groupobj['hosts'] = hostobj
                 if ('vars' in groupdata) and (groupdata['vars'] is not None):
                     vars = {}
                     variables = groupdata['vars']
@@ -123,6 +123,14 @@ class AnsibleGitInventory(object):
                         vars[key] = value
 
                     groupobj['vars'] = vars
+
+                if ('children' in groupdata) and (groupdata['children'] is not None):
+                    childobj = []
+                    children = groupdata['children']
+                    for var in children:
+                        childobj.append(var)
+
+                    groupobj['children'] = childobj
 
                 result[group] = groupobj
 
