@@ -91,8 +91,8 @@ class AnsibleGitInventory(object):
             result = {}
             for group, groupdata in data.iteritems():
 		groupobj = {}
-                # Check for host definition. Could be absend due to
-                # child definition
+                # Check for host definition. Could be absent due to children
+                # definition
                 if ('hosts' in groupdata) and (groupdata['hosts'] is not None):
                     hosts = groupdata['hosts']
                     hostobj = []
