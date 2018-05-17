@@ -23,3 +23,7 @@ db-site2:
             - db4
         vars:
             - ansible_connection: winrm
+db-servers:
+        children:
+            - db-site1
+            - db-site2
